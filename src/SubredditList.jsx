@@ -15,14 +15,21 @@ class SubredditList extends Component {
   createSubreddit(e){
     e.preventDefault();
     const subredditEntry = document.getElementById('subredditEntry');
-    if (subredditEntry.value.length === 0) {
-      subredditEntry.className += " Error";
+
+    if (!subredditEntry) {
       return;
     }
-    var classNames = subredditEntry.className.split(/ /);
-    subredditEntry.className = classNames.splice(classNames.indexOf('Error'), 1).join(' ');
+
+    const value = subredditEntry.value.trim();
+
+    if (value.length === 0) {
+      subredditEntry.classList.add('Error');
+      return;
+    }
+
+    subredditEntry.classList.remove('Error');
     this.props.createSubreddit(
-      subredditEntry.value
+      value
     );
     subredditEntry.value = "";
   }

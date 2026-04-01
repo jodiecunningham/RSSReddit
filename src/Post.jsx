@@ -3,22 +3,28 @@ import PropTypes from 'prop-types';
 
 const POST_TEXT_LIMIT = 1024;
 
+function getMediaState(props) {
+  return {
+    useFaviconFallback: !props.thumbnail && Boolean(props.favicon),
+    hideMedia: !props.thumbnail && !props.favicon,
+  };
+}
+
 class Post extends Component {
   constructor(props) {
     super(props);
-    this.state = {
-      useFaviconFallback: !props.thumbnail && Boolean(props.favicon),
-      hideMedia: !props.thumbnail && !props.favicon,
-    };
+    this.state = getMediaState(props);
 
     this.handleImageError = this.handleImageError.bind(this);
   }
 
-  componentWillReceiveProps(nextProps) {
-    this.setState({
-      useFaviconFallback: !nextProps.thumbnail && Boolean(nextProps.favicon),
-      hideMedia: !nextProps.thumbnail && !nextProps.favicon,
-    });
+  componentDidUpdate(prevProps) {
+    if (
+      prevProps.thumbnail !== this.props.thumbnail ||
+      prevProps.favicon !== this.props.favicon
+    ) {
+      this.setState(getMediaState(this.props));
+    }
   }
 
   handleImageError() {
@@ -53,7 +59,7 @@ class Post extends Component {
             className={mediaClassName}
             onError={this.handleImageError}
             src={mediaSrc}
-          ></img>
+          />
         ) : null}
         <div className="PostInfo">
           <div className="PostTitleRow">

@@ -92,6 +92,8 @@ function buildDocumentTitle(subredditDirectory) {
   return `RSSReddit ${subredditDirectory.map(formatSubredditTitlePart).join(',')}`;
 }
 
+const KONAMI_CODE = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65, 13];
+
 class App extends Component {
 
   constructor(props) {
@@ -227,14 +229,17 @@ class App extends Component {
   }
 
   easterEgg(e) {
-    this.state.easteregg.push(e.keyCode);
-    if( this.state.easteregg.length >= 11 && this.state.easteregg.slice(-11).every((value, index) => {
-      return value === [38, 38, 40, 40, 37, 39, 37, 39, 66, 65, 13][index];
-    })){
-      document.getElementsByTagName('body')[0].className += " easter-egg"
-    } else {
-      this.setState(this.state);
-    }
+    this.setState((prevState) => {
+      const easteregg = prevState.easteregg.concat(e.keyCode).slice(-KONAMI_CODE.length);
+
+      if (easteregg.length === KONAMI_CODE.length && easteregg.every((value, index) => {
+        return value === KONAMI_CODE[index];
+      })) {
+        document.body.classList.add('easter-egg');
+      }
+
+      return { easteregg };
+    });
   }
 
   toggleSubredditList() {
