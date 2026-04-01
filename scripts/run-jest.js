@@ -4,7 +4,11 @@ process.env.NODE_ENV = 'test';
 process.env.PUBLIC_URL = '';
 process.env.CI = process.env.CI || 'true';
 
-require('dotenv').config({ silent: true });
+try {
+  require('dotenv').config({ silent: true });
+} catch (error) {
+  // dotenv is optional for this repo's CI test runner
+}
 
 const path = require('path');
 const jest = require('jest');
