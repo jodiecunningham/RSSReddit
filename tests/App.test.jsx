@@ -8,6 +8,7 @@ import {
   getStoredAutoRefreshEnabled,
   getStoredAutoRefreshMinutes,
   getStoredBoolean,
+  getStoredScrollPosition,
   getSubredditsFromLocation,
   getThumbnailUrl,
 } from '../src/App';
@@ -145,6 +146,17 @@ describe('App helpers', () => {
     window.localStorage.setItem('rssreddit:collapseSubredditList', 'true');
     expect(getStoredBoolean('rssreddit:collapseSubredditList')).toBe(true);
     expect(getStoredBoolean('rssreddit:truncatePostText')).toBe(false);
+  });
+
+  it('reads a stored scroll position and falls back to the top for invalid values', () => {
+    window.localStorage.setItem('rssreddit:autoScrollPosition', '240');
+    expect(getStoredScrollPosition()).toBe(240);
+
+    window.localStorage.setItem('rssreddit:autoScrollPosition', '-5');
+    expect(getStoredScrollPosition()).toBe(0);
+
+    window.localStorage.setItem('rssreddit:autoScrollPosition', 'abc');
+    expect(getStoredScrollPosition()).toBe(0);
   });
 
   it('formats subreddit names for the document title', () => {
@@ -316,5 +328,25 @@ describe('App behavior', () => {
     expect(window.localStorage.getItem('rssreddit:collapseSubredditList')).toBe('true');
     expect(window.localStorage.getItem('rssreddit:truncatePostText')).toBe('true');
     expect(window.localStorage.getItem('rssreddit:autoScroll')).toBe('true');
+  });
+
+  it('restores the saved scroll position and resumes auto-scroll after a refresh', async () => {
+    window.localStorage.setItem('rssreddit:autoScroll', 'true');
+    window.localStorage.setItem('rssreddit:autoScrollPosition', '240');
+    window.scrollTo = vi.fn();
+    window.scrollBy = vi.fn();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(window.fetch).toHaveBeenCalledWith('/r/news.json?raw_json=1');
+      expect(window.scrollTo).toHaveBeenCalledWith(0, 240);
+    });
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 40);
+    });
+
+    expect(window.scrollBy).toHaveBeenCalledWith(0, 2);
   });
 });

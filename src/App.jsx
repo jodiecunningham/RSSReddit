@@ -15,6 +15,7 @@ const AUTO_REFRESH_MINUTES_KEY = 'rssreddit:autoRefreshMinutes';
 const COLLAPSE_SUBREDDIT_LIST_KEY = 'rssreddit:collapseSubredditList';
 const TRUNCATE_POST_TEXT_KEY = 'rssreddit:truncatePostText';
 const AUTO_SCROLL_KEY = 'rssreddit:autoScroll';
+const AUTO_SCROLL_POSITION_KEY = 'rssreddit:autoScrollPosition';
 
 function getSubredditsFromLocation(pathname) {
   const match = pathname.match(URL_SUBREDDIT_PATTERN);
@@ -80,6 +81,17 @@ function getStoredBoolean(key) {
   return window.localStorage.getItem(key) === 'true';
 }
 
+function getStoredScrollPosition() {
+  const storedPosition = window.localStorage.getItem(AUTO_SCROLL_POSITION_KEY);
+  const parsedPosition = parseInt(storedPosition, 10);
+
+  if (Number.isInteger(parsedPosition) && parsedPosition >= 0) {
+    return parsedPosition;
+  }
+
+  return 0;
+}
+
 function formatSubredditTitlePart(subreddit) {
   if (!subreddit) {
     return '';
@@ -121,6 +133,8 @@ class App extends Component {
 
     this.autoScrollTimer = null;
     this.autoRefreshTimer = null;
+    this.hasRestoredScrollPosition = false;
+    this.initialScrollPosition = getStoredScrollPosition();
 
     //bind callbacks
     this.createSubreddit = this.createSubreddit.bind(this);
@@ -133,6 +147,8 @@ class App extends Component {
     this.toggleAutoRefresh = this.toggleAutoRefresh.bind(this);
     this.handleAutoRefreshMinutesChange = this.handleAutoRefreshMinutesChange.bind(this);
     this.commitAutoRefreshMinutes = this.commitAutoRefreshMinutes.bind(this);
+    this.persistScrollPosition = this.persistScrollPosition.bind(this);
+    this.restoreScrollPosition = this.restoreScrollPosition.bind(this);
     this.syncUrlToSubreddits = this.syncUrlToSubreddits.bind(this);
 
     window.addEventListener('scroll', this.infiniteScroll);
@@ -142,12 +158,17 @@ class App extends Component {
     this.updateDocumentTitle();
     this.loadPosts();
 
+    if (this.state.autoScroll) {
+      this.startAutoScroll();
+    }
+
     if (this.state.autoRefreshEnabled) {
       this.startAutoRefresh();
     }
   }
 
   componentWillUnmount(){
+    this.persistScrollPosition();
     this.stopAutoScroll();
     this.stopAutoRefresh();
     window.removeEventListener('scroll', this.infiniteScroll);
@@ -318,6 +339,7 @@ class App extends Component {
     this.stopAutoRefresh();
 
     this.autoRefreshTimer = window.setTimeout(() => {
+      this.persistScrollPosition();
       window.location.reload();
     }, this.state.autoRefreshMinutes * 60 * 1000);
   }
@@ -329,6 +351,25 @@ class App extends Component {
 
     window.clearTimeout(this.autoRefreshTimer);
     this.autoRefreshTimer = null;
+  }
+
+  persistScrollPosition() {
+    window.localStorage.setItem(
+      AUTO_SCROLL_POSITION_KEY,
+      window.scrollY.toString()
+    );
+  }
+
+  restoreScrollPosition() {
+    if (this.hasRestoredScrollPosition) {
+      return;
+    }
+
+    if (this.initialScrollPosition > 0) {
+      window.scrollTo(0, this.initialScrollPosition);
+    }
+
+    this.hasRestoredScrollPosition = true;
   }
 
   syncUrlToSubreddits() {
@@ -366,7 +407,7 @@ class App extends Component {
         } )),
         nextThing: responseJson.data.after,
         loadingPosts: false,
-      });
+      }, this.restoreScrollPosition);
     };
 
     if (this.state.nextThing) {
@@ -388,6 +429,8 @@ class App extends Component {
   }
 
   infiniteScroll() {
+    this.persistScrollPosition();
+
     //if you've scrolled 90 perceont of the page, you probably want more
     if (window.scrollY > 0.9 * window.innerWidth && !this.state.loadingPosts) {
       this.setState({loadingPosts: true});
@@ -451,6 +494,7 @@ export {
   getStoredBoolean,
   getStoredAutoRefreshEnabled,
   getStoredAutoRefreshMinutes,
+  getStoredScrollPosition,
 };
 
 export default App;
