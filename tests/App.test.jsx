@@ -2,9 +2,12 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildFeedRequestPath,
   buildDocumentTitle,
   formatSubredditTitlePart,
   getFaviconUrl,
+  getListingPathFromLocation,
+  getListingSearchFromLocation,
   getStoredAutoRefreshEnabled,
   getStoredAutoRefreshMinutes,
   getStoredBoolean,
@@ -81,6 +84,26 @@ describe('App helpers', () => {
 
   it('falls back to the default multireddit when the path has no subreddit section', () => {
     expect(getSubredditsFromLocation('/')).toEqual(DEFAULT_SUBREDDITS);
+  });
+
+  it('reads the listing path suffix from the url path', () => {
+    expect(getListingPathFromLocation('/r/news+worldnews/top')).toBe('/top');
+    expect(getListingPathFromLocation('/r/news+worldnews/top/')).toBe('/top');
+    expect(getListingPathFromLocation('/r/news+worldnews')).toBe('');
+  });
+
+  it('preserves listing query params but strips app-managed pagination params', () => {
+    expect(getListingSearchFromLocation('?t=hour')).toBe('?t=hour');
+    expect(getListingSearchFromLocation('?t=day&raw_json=1&after=t3_x&limit=50')).toBe('?t=day');
+    expect(getListingSearchFromLocation('')).toBe('');
+  });
+
+  it('builds a reddit feed path that preserves listing and query params', () => {
+    expect(buildFeedRequestPath(['news', 'worldnews'], '/top', '?t=hour', ''))
+      .toBe('/r/news+worldnews/top.json?t=hour&raw_json=1');
+
+    expect(buildFeedRequestPath(['news'], '/top', '?t=hour', 't3_after'))
+      .toBe('/r/news/top.json?t=hour&raw_json=1&after=t3_after&limit=50');
   });
 
   it('prefers preview images over thumbnail urls', () => {
@@ -195,6 +218,16 @@ describe('App behavior', () => {
     expect(document.title).toBe('RSSReddit News,Worldnews');
   });
 
+  it('honors reddit listing paths and query params from the current url', async () => {
+    window.history.replaceState(null, '', '/r/news+worldnews/top?t=hour');
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(window.fetch).toHaveBeenCalledWith('/r/news+worldnews/top.json?t=hour&raw_json=1');
+    });
+  });
+
   it('adds a subreddit, updates the url, and fetches the combined feed', async () => {
     render(<App />);
 
@@ -217,6 +250,28 @@ describe('App behavior', () => {
     expect(document.title).toBe('RSSReddit News,Worldnews');
   });
 
+  it('preserves listing path and query params when changing subreddits', async () => {
+    window.history.replaceState(null, '', '/r/news/top?t=hour');
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(window.fetch).toHaveBeenCalledWith('/r/news/top.json?t=hour&raw_json=1');
+    });
+
+    window.fetch.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('subreddit (hit enter)'), {
+      target: { value: 'worldnews' },
+    });
+    fireEvent.submit(screen.getByText('r/').closest('form'));
+
+    await waitFor(() => {
+      expect(`${window.location.pathname}${window.location.search}`).toBe('/r/news+worldnews/top?t=hour');
+      expect(window.fetch).toHaveBeenCalledWith('/r/news+worldnews/top.json?t=hour&raw_json=1');
+    });
+  });
+
   it('removes a subreddit, resets pagination, and updates the url', async () => {
     window.history.replaceState(null, '', '/r/news+worldnews');
 
@@ -232,6 +287,24 @@ describe('App behavior', () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe('/r/news');
       expect(window.fetch).toHaveBeenCalledWith('/r/news.json?raw_json=1');
+    });
+  });
+
+  it('preserves listing path and query params when removing subreddits', async () => {
+    window.history.replaceState(null, '', '/r/news+worldnews/top?t=hour');
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(window.fetch).toHaveBeenCalledWith('/r/news+worldnews/top.json?t=hour&raw_json=1');
+    });
+
+    window.fetch.mockClear();
+    fireEvent.click(screen.getByText('r/worldnews'));
+
+    await waitFor(() => {
+      expect(`${window.location.pathname}${window.location.search}`).toBe('/r/news/top?t=hour');
+      expect(window.fetch).toHaveBeenCalledWith('/r/news/top.json?t=hour&raw_json=1');
     });
   });
 

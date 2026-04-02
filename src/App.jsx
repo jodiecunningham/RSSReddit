@@ -10,6 +10,7 @@ const IS_LOCAL_DEV =
 
 const REDDIT_BASE_URL = IS_LOCAL_DEV ? '' : 'https://www.reddit.com';
 const URL_SUBREDDIT_PATTERN = /\/r\/([^/?#]+)/i;
+const URL_LISTING_SUFFIX_PATTERN = /^\/r\/[^/?#]+(\/[^?#]*)?$/i;
 const AUTO_REFRESH_ENABLED_KEY = 'rssreddit:autoRefreshEnabled';
 const AUTO_REFRESH_MINUTES_KEY = 'rssreddit:autoRefreshMinutes';
 const COLLAPSE_SUBREDDIT_LIST_KEY = 'rssreddit:collapseSubredditList';
@@ -29,6 +30,44 @@ function getSubredditsFromLocation(pathname) {
     .split('+')
     .map((subreddit) => subreddit.trim())
     .filter(Boolean);
+}
+
+function getListingPathFromLocation(pathname) {
+  const match = pathname.match(URL_LISTING_SUFFIX_PATTERN);
+
+  if (!match || !match[1]) {
+    return '';
+  }
+
+  return match[1].replace(/\/$/, '');
+}
+
+function getListingSearchFromLocation(search) {
+  if (!search) {
+    return '';
+  }
+
+  const params = new URLSearchParams(search);
+  params.delete('raw_json');
+  params.delete('after');
+  params.delete('limit');
+
+  const normalizedSearch = params.toString();
+
+  return normalizedSearch ? `?${normalizedSearch}` : '';
+}
+
+function buildFeedRequestPath(subredditDirectory, listingPath, listingSearch, nextThing) {
+  const params = new URLSearchParams(listingSearch);
+
+  params.set('raw_json', '1');
+
+  if (nextThing) {
+    params.set('after', nextThing);
+    params.set('limit', '50');
+  }
+
+  return `/r/${subredditDirectory.join('+')}${listingPath}.json?${params.toString()}`;
 }
 
 function getThumbnailUrl(data) {
@@ -111,6 +150,8 @@ class App extends Component {
   constructor(props) {
     super(props);
     const subredditDirectory = getSubredditsFromLocation(window.location.pathname);
+    const listingPath = getListingPathFromLocation(window.location.pathname);
+    const listingSearch = getListingSearchFromLocation(window.location.search);
     const autoRefreshEnabled = getStoredAutoRefreshEnabled();
     const autoRefreshMinutes = getStoredAutoRefreshMinutes();
     const collapseSubredditList = getStoredBoolean(COLLAPSE_SUBREDDIT_LIST_KEY);
@@ -119,6 +160,8 @@ class App extends Component {
 
     this.state = {
       subredditDirectory: subredditDirectory,
+      listingPath: listingPath,
+      listingSearch: listingSearch,
       posts: [],
       easteregg: [],
       nextThing: "",
@@ -373,10 +416,10 @@ class App extends Component {
   }
 
   syncUrlToSubreddits() {
-    const nextPath = `/r/${this.state.subredditDirectory.join('+')}`;
+    const nextUrl = `/r/${this.state.subredditDirectory.join('+')}${this.state.listingPath}${this.state.listingSearch}`;
 
-    if (window.location.pathname !== nextPath) {
-      window.history.replaceState(null, '', nextPath);
+    if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
+      window.history.replaceState(null, '', nextUrl);
     }
   }
 
@@ -411,21 +454,19 @@ class App extends Component {
     };
 
     if (this.state.nextThing) {
-      //append posts
       previousPosts = previousPosts.concat(this.state.posts);
-      window.fetch(`${REDDIT_BASE_URL}/r/` +
-        this.state.subredditDirectory.join( "+" ) +
-        `.json?raw_json=1&after=${this.state.nextThing}&limit=50` )
-      .then( ( response ) => { return response.json(); } )
-      .then( resolvePosts );
-    } else {
-      //replace posts
-      window.fetch(`${REDDIT_BASE_URL}/r/` +
-        this.state.subredditDirectory.join( "+" ) +
-        ".json?raw_json=1" )
-      .then( ( response ) => { return response.json(); } )
-      .then( resolvePosts );
     }
+
+    window.fetch(
+      `${REDDIT_BASE_URL}${buildFeedRequestPath(
+        this.state.subredditDirectory,
+        this.state.listingPath,
+        this.state.listingSearch,
+        this.state.nextThing
+      )}`
+    )
+    .then( ( response ) => { return response.json(); } )
+    .then( resolvePosts );
   }
 
   infiniteScroll() {
@@ -489,6 +530,9 @@ export {
   buildDocumentTitle,
   formatSubredditTitlePart,
   getSubredditsFromLocation,
+  getListingPathFromLocation,
+  getListingSearchFromLocation,
+  buildFeedRequestPath,
   getThumbnailUrl,
   getFaviconUrl,
   getStoredBoolean,
